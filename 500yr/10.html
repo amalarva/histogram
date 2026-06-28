@@ -1,0 +1,317 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10</title>
+<style>
+  :root{
+    --ink:#16202b;
+    --muted:#5b6b7a;
+    --faint:#90a0ad;
+    --line:#e4e9ee;
+    --panel:#ffffff;
+    --live:#2563a8;
+    --live-fill:rgba(37,99,168,.22);
+    --target:#94a3b8;
+    --fit:#1c7c54;        /* normal */
+    --uniform:#c2741a;    /* uniform */
+    --accent:#2563a8;
+    --ui: system-ui,-apple-system,"Segoe UI",Roboto,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+    --mono: ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:var(--ui); color:var(--ink); background:transparent;
+    line-height:1.45; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:940px; margin:0 auto; padding:22px 18px 30px;}
+  header{margin:0 0 2px;}
+  h1{font-size:30px; font-weight:700; margin:0; letter-spacing:-.02em; line-height:1.18;}
+
+  .controls{margin-top:16px; display:grid; grid-template-columns:repeat(2,1fr); gap:12px;}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field label{font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.02em; text-transform:uppercase;}
+  select,.numbox{font-family:var(--ui); font-size:13px; color:var(--ink); background:var(--panel);
+    border:1px solid var(--line); border-radius:8px; padding:8px 9px; appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%235b6b7a' stroke-width='1.4'/></svg>");
+    background-repeat:no-repeat; background-position:right 10px center;}
+  .numbox{appearance:auto; background-image:none;}
+  select:focus,.numbox:focus,input:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:1px;}
+
+  .chartcard{margin-top:18px; border:1px solid var(--line); border-radius:14px; background:var(--panel);
+    padding:14px 14px 6px; box-shadow:0 1px 2px rgba(20,32,43,.03);}
+  .legend{display:flex; flex-wrap:wrap; gap:14px; padding:2px 4px 10px; font-size:12px; color:var(--muted);}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .sw{width:14px; height:0; border-top-width:3px; border-top-style:solid; display:inline-block; border-radius:2px;}
+  .sw.bar{height:11px; border:0; border-radius:2px; background:var(--live-fill); box-shadow:inset 0 0 0 1.5px var(--live);}
+  canvas{display:block; width:100%; height:auto;}
+
+  .sliderrow{margin-top:16px;}
+  .sliderhead{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
+  .sliderhead .lab{font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.02em;}
+  .nval{font:650 26px/1 var(--mono); color:var(--ink); font-variant-numeric:tabular-nums;}
+  .nval .of{font:500 13px/1 var(--mono); color:var(--faint);}
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:30px; background:transparent; margin:6px 0 0; cursor:pointer;}
+  input[type=range]::-webkit-slider-runnable-track{height:6px; border-radius:999px;
+    background:linear-gradient(to right,var(--accent) var(--pct,100%), #e2e8f0 var(--pct,100%));}
+  input[type=range]::-moz-range-track{height:6px; border-radius:999px; background:#e2e8f0;}
+  input[type=range]::-moz-range-progress{height:6px; border-radius:999px; background:var(--accent);}
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:20px; height:20px; margin-top:-7px;
+    border-radius:50%; background:#fff; border:2px solid var(--accent); box-shadow:0 1px 3px rgba(20,32,43,.25);}
+  input[type=range]::-moz-range-thumb{width:20px; height:20px; border-radius:50%; background:#fff; border:2px solid var(--accent); box-shadow:0 1px 3px rgba(20,32,43,.25);}
+
+  .foot{margin-top:14px; font-size:12px; color:var(--faint);}
+
+  @media (max-width:620px){ .controls{grid-template-columns:1fr;} }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1 id="facName">10</h1>
+  </header>
+
+  <div class="controls">
+    <div class="field">
+      <label for="ref">참조 분포</label>
+      <select id="ref">
+        <option value="none">없음</option>
+        <option value="uniform">균등 (Uniform)</option>
+        <option value="normal">정규 (Normal)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="chartcard">
+    <div class="legend">
+      <span><i class="sw bar"></i> 현재 N 히스토그램</span>
+      <span><i class="sw" style="border-top-color:var(--target)"></i> 전체 데이터 (한계 형태)</span>
+      <span id="legUni" hidden><i class="sw" style="border-top-color:var(--uniform)"></i> 균등 참조</span>
+      <span id="legFit" hidden><i class="sw" style="border-top-color:var(--fit)"></i> 정규 적합</span>
+    </div>
+    <canvas id="cv" aria-label="수렴 히스토그램"></canvas>
+  </div>
+  <div class="sliderrow">
+    <div class="sliderhead">
+      <span class="lab">구간 수</span>
+      <span class="nval"><span id="bNow">24</span></span>
+    </div>
+    <input type="range" id="bins" min="5" max="35" value="24" step="1" aria-label="구간 수">
+  </div>
+  <div class="sliderrow">
+    <div class="sliderhead">
+      <span class="lab">표본 수 N</span>
+      <span class="nval"><span id="nNow">0</span><span class="of"> / <span id="nMax">0</span></span></span>
+    </div>
+    <input type="range" id="n" min="2" max="100" value="100" step="1" aria-label="표본 수 N">
+  </div>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var FACILITY = {"name":"10","values":[0.401,0.379,0.409,0.377,0.384,0.355,0.369,0.358,0.419,0.407,0.394,0.401,0.412,0.416,0.366,0.426,0.425,0.353,0.398,0.42,0.355,0.37,0.366,0.346,0.354,0.392,0.395,0.398,0.392,0.382,0.361,0.351,0.358,0.365,0.414,0.398,0.424,0.39,0.38,0.415,0.373,0.353,0.422,0.376,0.377,0.387,0.4,0.394,0.405,0.412,0.383,0.403,0.356,0.419,0.402,0.397,0.349,0.369,0.384,0.412,0.41,0.396,0.352,0.348,0.381,0.395,0.42,0.423,0.396,0.359,0.366,0.421,0.351,0.41,0.408,0.361,0.354,0.367,0.398,0.385,0.371,0.375,0.388,0.4,0.397,0.417,0.405,0.408,0.383,0.375,0.344,0.368,0.423,0.364,0.424,0.38,0.348,0.387,0.398,0.4,0.383,0.352,0.407,0.423,0.36,0.414,0.401,0.416,0.361,0.384,0.398,0.397,0.37,0.393,0.373,0.376,0.392,0.354,0.411,0.405,0.353,0.373,0.397,0.396,0.386,0.422,0.373,0.414,0.401,0.382,0.381,0.391,0.372,0.36,0.413,0.355,0.366,0.425,0.349,0.364,0.387,0.42,0.415,0.343,0.394,0.365,0.402,0.398,0.406,0.408,0.379,0.359,0.348,0.374,0.394,0.414,0.351,0.346,0.418,0.404,0.393,0.424,0.355,0.382,0.417,0.401,0.368,0.391,0.401,0.407,0.416,0.421,0.364,0.378,0.368,0.355,0.399,0.386,0.398,0.397,0.427,0.373,0.349,0.393,0.414,0.384,0.365,0.406,0.424,0.356,0.405,0.401,0.415,0.405,0.357,0.346,0.401,0.379,0.387,0.375,0.368,0.394,0.415,0.396,0.36,0.367,0.418,0.35,0.379,0.399,0.412,0.422,0.362,0.35,0.356,0.356,0.366,0.384,0.391,0.413,0.398,0.39,0.401,0.423,0.394,0.415,0.364,0.4,0.422,0.386,0.351,0.37,0.377,0.394,0.349,0.414,0.403,0.4,0.372,0.375,0.364,0.394,0.419,0.396,0.382,0.414,0.359,0.418,0.359,0.402,0.375,0.388,0.407,0.355,0.362,0.393,0.355,0.409,0.398,0.384,0.348,0.408,0.375,0.381,0.423,0.369,0.404,0.349,0.396,0.424,0.353,0.366,0.406,0.351,0.399,0.404,0.373,0.395,0.347,0.35,0.395,0.405,0.363,0.378,0.418,0.415,0.413,0.384,0.368,0.417,0.368,0.39,0.397,0.345,0.381,0.427,0.394,0.382,0.424,0.404]};          // {name, values}
+
+  var S={bins:15, ref:"none", N:0};
+
+  // ---------- math ----------
+  function stats(arr){
+    var n=arr.length; if(!n) return {n:0,mean:0,std:0,min:0,max:0};
+    var s=0,mn=Infinity,mx=-Infinity;
+    for(var i=0;i<n;i++){var x=arr[i]; s+=x; if(x<mn)mn=x; if(x>mx)mx=x;}
+    var m=s/n, ss=0;
+    for(var k=0;k<n;k++){var d=arr[k]-m; ss+=d*d;}
+    return {n:n, mean:m, std:Math.sqrt(ss/Math.max(1,n-1)), min:mn, max:mx};
+  }
+  function densityHist(values, lo, hi, B){
+    var w=(hi-lo)/B, d=new Array(B).fill(0), n=values.length;
+    if(n===0||w<=0) return d;
+    for(var i=0;i<n;i++){
+      var idx=Math.floor((values[i]-lo)/w);
+      if(idx===B) idx=B-1;
+      if(idx>=0&&idx<B) d[idx]++;
+    }
+    for(var b=0;b<B;b++) d[b]=d[b]/(n*w);
+    return d;
+  }
+  function normalPdf(x,m,sd){var c=1/(sd*Math.sqrt(2*Math.PI)); return c*Math.exp(-((x-m)*(x-m))/(2*sd*sd));}
+  function lognormalFit(values){
+    var n=0,s=0,logs=[];
+    for(var i=0;i<values.length;i++){ if(values[i]>0){ var l=Math.log(values[i]); logs.push(l); s+=l; n++; } }
+    if(n<2) return null;
+    var m=s/n, ss=0;
+    for(var k=0;k<n;k++){ var d=logs[k]-m; ss+=d*d; }
+    var sd=Math.sqrt(ss/(n-1));
+    if(!(sd>0)) return null;
+    return {mu:m, sigma:sd};
+  }
+  function lognormalPdf(x,mu,sigma){
+    if(x<=0) return 0;
+    var z=Math.log(x)-mu;
+    return (1/(x*sigma*Math.sqrt(2*Math.PI)))*Math.exp(-(z*z)/(2*sigma*sigma));
+  }
+
+  // ---------- DOM ----------
+  var $=function(id){return document.getElementById(id);};
+  var cv=$("cv"), ctx=cv.getContext("2d");
+  var elN=$("n"), refSel=$("ref"), binBox=$("bins");
+  var prefersReduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function resetN(){
+    var max=FACILITY.values.length;
+    elN.min=2; elN.max=max; elN.value=max; S.N=max; $("nMax").textContent=max;
+  }
+  function rangeFor(){
+    var st=stats(FACILITY.values);
+    var lo=st.min, hi=st.max; if(hi-lo<1e-9){lo-=0.5;hi+=0.5;}
+    var pad=(hi-lo)*0.04; lo-=pad; hi+=pad;
+    return {lo:lo, hi:hi, st:st};
+  }
+  function currentDensity(){
+    var r=rangeFor();
+    return densityHist(FACILITY.values.slice(0,S.N), r.lo, r.hi, S.bins);
+  }
+
+  // ---------- drawing ----------
+  function drawFrame(dens){
+    var all=FACILITY.values, B=S.bins, r=rangeFor(), st=r.st, lo=r.lo, hi=r.hi;
+    var target=densityHist(all, lo, hi, B);
+    var targetMax=0; for(var i=0;i<B;i++) if(target[i]>targetMax) targetMax=target[i];
+    if(targetMax<=0) targetMax=1;
+
+    var refFit = (S.ref==="lognormal") ? lognormalFit(all) : null;
+
+    var yMax=targetMax;
+    if(S.ref==="normal" && st.std>1e-9){ var pk=normalPdf(st.mean,st.mean,st.std); if(pk>yMax)yMax=pk; }
+    else if(S.ref==="uniform"){ var u=1/(hi-lo); if(u>yMax)yMax=u; }
+    else if(S.ref==="lognormal" && refFit){
+      var lpk=0, steps=240;
+      for(var s2=1;s2<=steps;s2++){ var xx=lo+(hi-lo)*s2/steps; if(xx>0){ var pv=lognormalPdf(xx,refFit.mu,refFit.sigma); if(pv>lpk)lpk=pv; } }
+      var cap=2.5*targetMax; if(lpk>cap)lpk=cap; if(lpk>yMax)yMax=lpk;
+    }
+    if(yMax<=0) yMax=1;
+    yMax*=1.18;
+
+    var dpr=window.devicePixelRatio||1;
+    var cssW=cv.clientWidth||860, cssH=Math.round(Math.min(420,Math.max(300,cssW*0.46)));
+    if(cv.width!==Math.round(cssW*dpr)||cv.height!==Math.round(cssH*dpr)){
+      cv.width=Math.round(cssW*dpr); cv.height=Math.round(cssH*dpr); cv.style.height=cssH+"px";
+    }
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,cssW,cssH);
+
+    var mL=46, mR=14, mT=12, mB=34;
+    var pw=cssW-mL-mR, ph=cssH-mT-mB;
+    var X=function(v){return mL + (v-lo)/(hi-lo)*pw;};
+    var Y=function(v){return mT + ph - (v/yMax)*ph;};
+
+    ctx.strokeStyle="#eef2f6"; ctx.fillStyle="#90a0ad"; ctx.lineWidth=1;
+    ctx.font="11px ui-monospace,Menlo,monospace"; ctx.textBaseline="middle";
+    for(var t=0;t<=4;t++){
+      var yv=yMax*t/4, py=Y(yv);
+      ctx.beginPath(); ctx.moveTo(mL,py); ctx.lineTo(mL+pw,py); ctx.stroke();
+      ctx.textAlign="right"; ctx.fillText(yv.toFixed(yMax<2?2:1), mL-7, py);
+    }
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    for(var k=0;k<=5;k++){ var xv=lo+(hi-lo)*k/5; ctx.fillText(xv.toFixed(2), X(xv), mT+ph+7); }
+    ctx.fillStyle="#5b6b7a"; ctx.font="11px system-ui,sans-serif"; ctx.textAlign="center";
+    ctx.fillText("침수심 (m)", mL+pw/2, mT+ph+19);
+    ctx.save(); ctx.translate(13, mT+ph/2); ctx.rotate(-Math.PI/2); ctx.fillText("빈도", 0, 0); ctx.restore();
+
+    var bw=pw/B;
+
+    ctx.fillStyle="rgba(37,99,168,.22)"; ctx.strokeStyle="#2563a8"; ctx.lineWidth=1.4;
+    for(var b=0;b<B;b++){
+      var d=Math.min(dens[b], yMax); if(d<=0) continue;
+      var x0=mL+b*bw, y0=Y(d), hgt=(mT+ph)-y0;
+      ctx.fillRect(x0+0.6, y0, bw-1.2, hgt);
+      ctx.strokeRect(x0+0.6, y0, bw-1.2, hgt);
+    }
+
+    ctx.strokeStyle="#94a3b8"; ctx.lineWidth=1.6; ctx.setLineDash([4,3]); ctx.beginPath();
+    for(var c=0;c<B;c++){
+      var xa=mL+c*bw, xb=mL+(c+1)*bw, yy=Y(Math.min(target[c],yMax));
+      if(c===0) ctx.moveTo(xa,yy); else ctx.lineTo(xa,yy);
+      ctx.lineTo(xb,yy);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+
+    if(S.ref==="normal" && st.std>1e-9){
+      ctx.strokeStyle="#1c7c54"; ctx.lineWidth=2; ctx.beginPath();
+      for(var px=0;px<=pw;px+=2){
+        var xv2=lo+(px/pw)*(hi-lo), yv2=normalPdf(xv2,st.mean,st.std), Px=mL+px, Py=Y(Math.min(yv2,yMax));
+        if(px===0) ctx.moveTo(Px,Py); else ctx.lineTo(Px,Py);
+      }
+      ctx.stroke();
+    } else if(S.ref==="uniform"){
+      var uy=Y(Math.min(1/(hi-lo),yMax));
+      ctx.strokeStyle="#c2741a"; ctx.lineWidth=2; ctx.beginPath();
+      ctx.moveTo(X(st.min),uy); ctx.lineTo(X(st.max),uy); ctx.stroke();
+    } else if(S.ref==="lognormal" && refFit){
+      ctx.strokeStyle="#7048e8"; ctx.lineWidth=2; ctx.beginPath(); var started=false;
+      for(var qx=0;qx<=pw;qx+=2){
+        var xv3=lo+(qx/pw)*(hi-lo); if(xv3<=0) continue;
+        var yv3=lognormalPdf(xv3,refFit.mu,refFit.sigma), Qx=mL+qx, Qy=Y(Math.min(yv3,yMax));
+        if(!started){ ctx.moveTo(Qx,Qy); started=true; } else ctx.lineTo(Qx,Qy);
+      }
+      if(started) ctx.stroke();
+    }
+
+    ctx.strokeStyle="#cbd5e1"; ctx.lineWidth=1; ctx.beginPath();
+    ctx.moveTo(mL,mT+ph); ctx.lineTo(mL+pw,mT+ph); ctx.stroke();
+  }
+
+  // ---------- animation ----------
+  var anim={cur:null, raf:0};
+  function render(animate){
+    var goal=currentDensity();
+    updateN();
+    if(prefersReduced || !animate || !anim.cur || anim.cur.length!==goal.length){
+      anim.cur=goal.slice(); drawFrame(anim.cur); return;
+    }
+    cancelAnimationFrame(anim.raf);
+    var from=anim.cur.slice(), start=performance.now(), dur=160;
+    function step(now){
+      var p=Math.min(1,(now-start)/dur), e=1-Math.pow(1-p,3), out=new Array(goal.length);
+      for(var i=0;i<goal.length;i++) out[i]=from[i]+(goal[i]-from[i])*e;
+      anim.cur=out; drawFrame(out);
+      if(p<1) anim.raf=requestAnimationFrame(step);
+    }
+    anim.raf=requestAnimationFrame(step);
+  }
+  function updateN(){
+    var n=Math.min(S.N, FACILITY.values.length);
+    $("nNow").textContent=n;
+    var pct=(S.N-(+elN.min))/((+elN.max)-(+elN.min))*100;
+    elN.style.setProperty("--pct", pct+"%");
+  }
+  function syncLegend(){
+    $("legUni").hidden = S.ref!=="uniform";
+    $("legFit").hidden = S.ref!=="normal";
+  }
+
+  // ---------- events ----------
+  elN.addEventListener("input", function(){ S.N=+elN.value; render(true); });
+  refSel.addEventListener("change", function(){ S.ref=refSel.value; syncLegend(); render(false); });
+  binBox.addEventListener("input", function(){
+    var b=Math.max(5,Math.min(80, parseInt(binBox.value,10)||24));
+    S.bins=b;
+    document.getElementById("bNow").textContent=b;
+    var pct=(b-(+binBox.min))/((+binBox.max)-(+binBox.min))*100;
+    binBox.style.setProperty("--pct", pct+"%");
+    anim.cur=null; render(false);
+  });
+  window.addEventListener("resize", function(){ drawFrame(anim.cur||currentDensity()); });
+
+  // ---------- init ----------
+  resetN(); syncLegend();
+  // 구간 수 슬라이더 초기 표시
+  S.bins = +binBox.value;
+  $("bNow").textContent = binBox.value;
+  (function(){
+    var pct=(+binBox.value-(+binBox.min))/((+binBox.max)-(+binBox.min))*100;
+    binBox.style.setProperty("--pct", pct+"%");
+  })();
+  render(false);
+  $("foot").textContent="모의 "+FACILITY.values.length+"회";
+})();
+</script>
